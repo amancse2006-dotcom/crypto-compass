@@ -1,7 +1,11 @@
 export function SignalGauge({ score, label }: { score: number; label: string }) {
   const pct = Math.max(0, Math.min(100, (score + 1) * 50));
   const color =
-    score > 0.15 ? "var(--color-bull)" : score < -0.15 ? "var(--color-bear)" : "var(--color-neutral)";
+    score > 0.15
+      ? "var(--color-bull)"
+      : score < -0.15
+        ? "var(--color-bear)"
+        : "var(--color-neutral)";
 
   return (
     <div>

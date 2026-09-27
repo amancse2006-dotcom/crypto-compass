@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Search, TrendingUp, Clock, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
 import { SUGGESTED_PAIRS, TIMEFRAMES } from "@/lib/analysis-data";
 import { api, type Timeframe, type Summary } from "@/lib/api";
@@ -11,8 +11,12 @@ import { PriceChart } from "@/components/PriceChart";
 export const Route = createFileRoute("/analysis")({
   head: () => ({
     meta: [
-      { title: "Analysis Terminal — Quantix" },
-      { name: "description", content: "Search any crypto pair to see 40+ indicators, 40+ candlestick patterns, and a consolidated buy/sell signal per timeframe." },
+      { title: "Analysis Terminal — CryptoScope" },
+      {
+        name: "description",
+        content:
+          "Search any crypto pair to see 40+ indicators, 40+ candlestick patterns, and a consolidated buy/sell signal per timeframe.",
+      },
     ],
   }),
   component: Analysis,
@@ -41,9 +45,12 @@ function Analysis() {
     return (
       <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-24 text-center">
         <p className="font-mono text-xs uppercase tracking-wider text-primary">Analysis Terminal</p>
-        <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">What pair do you want to analyse?</h1>
+        <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
+          What pair do you want to analyse?
+        </h1>
         <p className="mt-3 max-w-xl text-muted-foreground">
-          Enter any symbol — we'll quote it against USDT by default. 40+ indicators, 40+ patterns, every timeframe.
+          Enter any symbol — we'll quote it against USDT by default. 40+ indicators, 40+ patterns,
+          every timeframe.
         </p>
 
         <form onSubmit={submit} className="mt-10 w-full">
@@ -59,19 +66,25 @@ function Analysis() {
             <button
               type="submit"
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
-            >Analyse</button>
+            >
+              Analyse
+            </button>
           </div>
         </form>
 
         <div className="mt-10 w-full">
-          <p className="text-left font-mono text-xs uppercase tracking-wider text-muted-foreground">Suggested pairs</p>
+          <p className="text-left font-mono text-xs uppercase tracking-wider text-muted-foreground">
+            Suggested pairs
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {SUGGESTED_PAIRS.map((p) => (
               <button
                 key={p}
                 onClick={() => setPair(p)}
                 className="rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-xs hover:border-primary hover:text-primary"
-              >{p}</button>
+              >
+                {p}
+              </button>
             ))}
           </div>
         </div>
@@ -79,14 +92,34 @@ function Analysis() {
     );
   }
 
-  return <AnalysisView pair={pair} tf={tf} setTf={setTf} mode={mode} setMode={setMode} onReset={() => { setPair(null); setQuery(""); }} />;
+  return (
+    <AnalysisView
+      pair={pair}
+      tf={tf}
+      setTf={setTf}
+      mode={mode}
+      setMode={setMode}
+      onReset={() => {
+        setPair(null);
+        setQuery("");
+      }}
+    />
+  );
 }
 
 function AnalysisView({
-  pair, tf, setTf, mode, setMode, onReset,
+  pair,
+  tf,
+  setTf,
+  mode,
+  setMode,
+  onReset,
 }: {
-  pair: string; tf: Timeframe; setTf: (t: Timeframe) => void;
-  mode: "technical" | "candlestick"; setMode: (m: "technical" | "candlestick") => void;
+  pair: string;
+  tf: Timeframe;
+  setTf: (t: Timeframe) => void;
+  mode: "technical" | "candlestick";
+  setMode: (m: "technical" | "candlestick") => void;
   onReset: () => void;
 }) {
   const klinesQ = useQuery({
@@ -101,6 +134,12 @@ function AnalysisView({
     refetchInterval: 60_000,
   });
 
+  const tickerQ = useQuery({
+    queryKey: ["ticker", pair],
+    queryFn: () => api.ticker(pair),
+    refetchInterval: 30_000,
+  });
+
   const newsQ = useQuery({
     queryKey: ["news", pair],
     queryFn: () => api.news(pair, 8),
@@ -108,13 +147,13 @@ function AnalysisView({
   });
 
   // per-timeframe summary sidebar (parallel queries)
-  const perTfQueries = TIMEFRAMES.map((t) =>
-    useQuery({
+  const perTfQueries = useQueries({
+    queries: TIMEFRAMES.map((t) => ({
       queryKey: ["analysis-summary", pair, t],
       queryFn: () => api.analysis(pair, t).then((a) => a.summary),
       staleTime: 60_000,
-    })
-  );
+    })),
+  });
 
   const indicators = analysisQ.data?.indicators ?? [];
   const patterns = analysisQ.data?.patterns ?? [];
@@ -128,9 +167,14 @@ function AnalysisView({
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">{pair}</h1>
           <SignalBadge signal={overall.label} size="md" />
-          {analysisQ.isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {analysisQ.isFetching && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
         </div>
-        <button onClick={onReset} className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs hover:bg-surface-elevated">
+        <button
+          onClick={onReset}
+          className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs hover:bg-surface-elevated"
+        >
           ← Change pair
         </button>
       </div>
@@ -141,12 +185,55 @@ function AnalysisView({
           <div>
             <p className="font-medium text-bear">Backend unreachable</p>
             <p className="text-muted-foreground">
-              {(klinesQ.error || analysisQ.error)?.toString()}<br />
-              Make sure your FastAPI server is running and <code className="font-mono">VITE_API_URL</code> points to it.
+              {(klinesQ.error || analysisQ.error)?.toString()}
+              <br />
+              Make sure your FastAPI server is running and{" "}
+              <code className="font-mono">VITE_API_URL</code> points to it.
             </p>
           </div>
         </div>
       )}
+
+      <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <InfoCard
+          label="Live price"
+          value={
+            tickerQ.data
+              ? new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  maximumFractionDigits: tickerQ.data.price > 10 ? 2 : 6,
+                }).format(tickerQ.data.price)
+              : tickerQ.isLoading
+                ? "Loading…"
+                : "Unavailable"
+          }
+          detail={
+            tickerQ.data
+              ? `${tickerQ.data.changePercent >= 0 ? "+" : ""}${tickerQ.data.changePercent.toFixed(2)}% over 24h`
+              : "Live ticker from backend"
+          }
+        />
+        <InfoCard
+          label="Volatility"
+          value={overall.risk ? `${overall.risk.volatilityPct.toFixed(2)}%` : "—"}
+          detail="Std. dev. of candle returns"
+        />
+        <InfoCard
+          label="Maximum drawdown"
+          value={overall.risk ? `${overall.risk.maxDrawdownPct.toFixed(2)}%` : "—"}
+          detail="Peak-to-trough in selected window"
+        />
+        <InfoCard
+          label="Risk classification"
+          value={overall.risk?.classification ?? "—"}
+          detail={
+            overall.risk
+              ? `Volume ${overall.risk.volumeRatio.toFixed(2)}× 20-bar average`
+              : "Waiting for analysis"
+          }
+        />
+      </section>
 
       {/* Timeframe selector */}
       <div className="mt-4 inline-flex rounded-lg border border-border bg-surface p-1">
@@ -155,9 +242,13 @@ function AnalysisView({
             key={t}
             onClick={() => setTf(t)}
             className={`rounded-md px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition ${
-              tf === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              tf === t
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
             }`}
-          >{t}</button>
+          >
+            {t}
+          </button>
         ))}
       </div>
 
@@ -168,7 +259,11 @@ function AnalysisView({
             <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading chart…
           </div>
         ) : (
-          <PriceChart pair={pair} tf={tf} candles={Array.isArray(klinesQ.data) ? klinesQ.data : []} />
+          <PriceChart
+            pair={pair}
+            tf={tf}
+            candles={Array.isArray(klinesQ.data) ? klinesQ.data : []}
+          />
         )}
 
         <aside className="rounded-xl border border-border bg-surface p-4">
@@ -176,7 +271,9 @@ function AnalysisView({
             <h3 className="text-sm font-semibold">Signal by timeframe</h3>
             <TrendingUp className="h-4 w-4 text-primary" />
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">Consolidated indicator + pattern bias.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Consolidated indicator + pattern bias.
+          </p>
           <div className="mt-4 space-y-3">
             {TIMEFRAMES.map((t, idx) => {
               const q = perTfQueries[idx];
@@ -186,24 +283,86 @@ function AnalysisView({
                   key={t}
                   onClick={() => setTf(t)}
                   className={`block w-full rounded-lg border p-3 text-left transition ${
-                    tf === t ? "border-primary bg-primary/5" : "border-border hover:bg-surface-elevated"
+                    tf === t
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:bg-surface-elevated"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{t}</span>
-                    {s ? <SignalBadge signal={s.label} /> : (
+                    <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                      {t}
+                    </span>
+                    {s ? (
+                      <SignalBadge signal={s.label} />
+                    ) : (
                       <span className="font-mono text-[10px] text-muted-foreground/60">
                         {q.isLoading ? "…" : "—"}
                       </span>
                     )}
                   </div>
-                  {s && <div className="mt-2"><SignalGauge score={s.score} label={s.label} /></div>}
+                  {s && (
+                    <div className="mt-2">
+                      <SignalGauge score={s.score} label={s.label} />
+                    </div>
+                  )}
                 </button>
               );
             })}
           </div>
         </aside>
       </div>
+
+      <section className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]">
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-semibold">Weighted signal breakdown</h2>
+            <SignalBadge signal={overall.label} />
+          </div>
+          {analysisQ.isLoading ? (
+            <p className="mt-4 text-sm text-muted-foreground">Calculating weighted factors…</p>
+          ) : overall.breakdown ? (
+            <div className="mt-4 space-y-3">
+              {Object.entries(overall.breakdown).map(([factor, data]) => (
+                <div key={factor}>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="capitalize">{factor}</span>
+                    <span className="font-mono text-muted-foreground">
+                      {Math.round(data.weight * 100)}% weight · {data.score >= 0 ? "+" : ""}
+                      {data.score.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={`h-full rounded-full ${data.score >= 0 ? "bg-bull" : "bg-bear"}`}
+                      style={{ width: `${Math.abs(data.score) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Breakdown unavailable. Check the backend version.
+            </p>
+          )}
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">
+            {overall.explanation ??
+              "The technical signal is a weighted summary of historical candles, not a price forecast."}
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <h2 className="font-semibold">Risk context</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            {overall.risk
+              ? `The selected window shows a ${overall.risk.classification.toLowerCase()} historical risk profile. The observed candle range spans ${overall.risk.rangePct.toFixed(2)}% of the latest close; past volatility and drawdown can change quickly.`
+              : "Risk measures appear when enough historical candles are available."}
+          </p>
+          <p className="mt-4 border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
+            These historical indicators are educational context and do not forecast future prices or
+            recommend trades.
+          </p>
+        </div>
+      </section>
 
       {/* Mode toggle */}
       <div className="mt-8 flex items-center justify-between">
@@ -213,9 +372,13 @@ function AnalysisView({
               key={m}
               onClick={() => setMode(m)}
               className={`rounded-md px-4 py-2 text-sm font-medium capitalize transition ${
-                mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                mode === m
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
-            >{m} analysis</button>
+            >
+              {m} analysis
+            </button>
           ))}
         </div>
       </div>
@@ -238,15 +401,26 @@ function AnalysisView({
             </thead>
             <tbody>
               {indicators.map((i) => (
-                <tr key={i.name} className="border-b border-border/50 last:border-0 hover:bg-surface-elevated/50">
+                <tr
+                  key={i.name}
+                  className="border-b border-border/50 last:border-0 hover:bg-surface-elevated/50"
+                >
                   <td className="px-4 py-2.5">{i.name}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{i.category}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                    {i.category}
+                  </td>
                   <td className="px-4 py-2.5 font-mono text-muted-foreground">{i.value}</td>
-                  <td className="px-4 py-2.5 text-right"><SignalBadge signal={i.signal} /></td>
+                  <td className="px-4 py-2.5 text-right">
+                    <SignalBadge signal={i.signal} />
+                  </td>
                 </tr>
               ))}
               {indicators.length === 0 && (
-                <tr><td colSpan={4} className="p-6 text-center text-sm text-muted-foreground">No indicator data.</td></tr>
+                <tr>
+                  <td colSpan={4} className="p-6 text-center text-sm text-muted-foreground">
+                    No indicator data.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -263,18 +437,35 @@ function AnalysisView({
             </thead>
             <tbody>
               {patterns.map((p) => (
-                <tr key={p.name} className="border-b border-border/50 last:border-0 hover:bg-surface-elevated/50">
+                <tr
+                  key={p.name}
+                  className="border-b border-border/50 last:border-0 hover:bg-surface-elevated/50"
+                >
                   <td className="px-4 py-2.5">{p.name}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{p.category}</td>
-                  <td className="px-4 py-2.5 font-mono text-muted-foreground">{p.detected ? "Yes" : "—"}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{p.reliability}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                    {p.category}
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-muted-foreground">
+                    {p.detected ? "Yes" : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                    {p.reliability}
+                  </td>
                   <td className="px-4 py-2.5 text-right">
-                    {p.detected ? <SignalBadge signal={p.signal} /> : <span className="font-mono text-xs text-muted-foreground/60">—</span>}
+                    {p.detected ? (
+                      <SignalBadge signal={p.signal} />
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground/60">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
               {patterns.length === 0 && (
-                <tr><td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">No patterns reported.</td></tr>
+                <tr>
+                  <td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">
+                    No patterns reported.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -285,7 +476,9 @@ function AnalysisView({
       <section className="mt-10">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Latest news — {pair.split("/")[0]}</h2>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">live</span>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            live
+          </span>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {newsQ.isLoading && (
@@ -294,8 +487,13 @@ function AnalysisView({
             </div>
           )}
           {newsItems.map((n, idx) => (
-            <a key={idx} href={n.url} target="_blank" rel="noreferrer"
-              className="group rounded-xl border border-border bg-surface p-4 transition hover:border-primary/40">
+            <a
+              key={idx}
+              href={n.url}
+              target="_blank"
+              rel="noreferrer"
+              className="group rounded-xl border border-border bg-surface p-4 transition hover:border-primary/40"
+            >
               <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 <span className="text-primary">{n.source}</span>
                 <span>·</span>
@@ -314,6 +512,16 @@ function AnalysisView({
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+function InfoCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-2 text-xl font-semibold">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
     </div>
   );
 }

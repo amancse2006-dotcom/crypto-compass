@@ -2,7 +2,8 @@ export type SignalKey = "STRONG_BUY" | "BUY" | "NEUTRAL" | "SELL" | "STRONG_SELL
 
 function normalize(s: string): SignalKey {
   const k = s.toUpperCase().replace(/\s+/g, "_");
-  if (k === "STRONG_BUY" || k === "BUY" || k === "NEUTRAL" || k === "SELL" || k === "STRONG_SELL") return k;
+  if (k === "STRONG_BUY" || k === "BUY" || k === "NEUTRAL" || k === "SELL" || k === "STRONG_SELL")
+    return k;
   return "NEUTRAL";
 }
 

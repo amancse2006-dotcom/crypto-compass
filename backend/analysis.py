@@ -27,14 +27,21 @@ def _sma(x: np.ndarray, n: int) -> float:
     return float(np.mean(x[-n:]))
 
 
+def _ema_series(x: np.ndarray, n: int) -> np.ndarray:
+    if len(x) < n:
+        return np.full(len(x), np.nan, dtype=float)
+    k = 2 / (n + 1)
+    out = np.empty(len(x), dtype=float)
+    out[0] = float(x[0])
+    for i, value in enumerate(x[1:], 1):
+        out[i] = float(value) * k + out[i - 1] * (1 - k)
+    return out
+
+
 def _ema(x: np.ndarray, n: int) -> float:
     if len(x) < n:
         return float("nan")
-    k = 2 / (n + 1)
-    ema = float(x[0])
-    for v in x[1:]:
-        ema = v * k + ema * (1 - k)
-    return ema
+    return float(_ema_series(x, n)[-1])
 
 
 def _rsi(x: np.ndarray, n: int = 14) -> float:
@@ -52,11 +59,11 @@ def _rsi(x: np.ndarray, n: int = 14) -> float:
 
 
 def _macd(x: np.ndarray) -> tuple[float, float, float]:
-    ema12 = _ema(x, 12)
-    ema26 = _ema(x, 26)
-    macd = ema12 - ema26
-    # quick signal line approximation
-    signal = _ema(np.array([macd]), 9) if not np.isnan(macd) else float("nan")
+    if len(x) < 26:
+        return float("nan"), float("nan"), float("nan")
+    macd_series = _ema_series(x, 12) - _ema_series(x, 26)
+    signal_series = _ema_series(macd_series, 9)
+    macd, signal = float(macd_series[-1]), float(signal_series[-1])
     return macd, signal, macd - signal
 
 
@@ -315,7 +322,7 @@ def _aggregate(items: list[dict]) -> Signal:
 
 def run_analysis(candles: list[dict]) -> dict:
     if not candles:
-        return {"indicators": [], "patterns": [], "summary": {"overall": "neutral"}}
+        return {"indicators": [], "patterns": [], "summary": {"overall": "neutral", "score": 0, "breakdown": {}, "risk": {}}}
 
     o = np.array([c["open"] for c in candles], dtype=float)
     h = np.array([c["high"] for c in candles], dtype=float)
@@ -326,16 +333,53 @@ def run_analysis(candles: list[dict]) -> dict:
     indicators = compute_indicators(o, h, l, cl, v)
     patterns = detect_patterns(o, h, l, cl)
 
-    ind_sig = _aggregate(indicators)
-    pat_sig = _aggregate(patterns)
-    overall = _aggregate([{"signal": ind_sig}, {"signal": pat_sig}])
+    # CryptoScope weighted composite: trend 30%, momentum 25%, volatility
+    # 20%, volume 15%, and observed candle patterns 10%.
+    def direction(items: list[dict]) -> float:
+        values = [{"buy": 1.0, "strong_buy": 1.0, "sell": -1.0,
+                   "strong_sell": -1.0, "neutral": 0.0}.get(i.get("signal"), 0.0) for i in items]
+        return float(sum(values) / len(values)) if values else 0.0
+
+    trend_items = [i for i in indicators if i["name"].startswith(("SMA", "EMA"))]
+    momentum_items = [i for i in indicators if i["name"].startswith(("RSI", "MACD", "ROC", "Momentum", "Stoch", "CCI", "Williams"))]
+    pattern_items = [p for p in patterns if p.get("signal") in ("buy", "sell", "strong_buy", "strong_sell")]
+    returns = np.diff(cl) / cl[:-1] if len(cl) > 1 else np.array([], dtype=float)
+    volatility_pct = float(np.std(returns) * 100) if len(returns) else 0.0
+    peak = np.maximum.accumulate(cl)
+    drawdown_pct = float(np.min((cl - peak) / np.maximum(peak, 1e-12)) * 100) if len(cl) else 0.0
+    latest_volume = float(v[-1]) if len(v) else 0.0
+    average_volume = float(np.mean(v[-20:])) if len(v) else 0.0
+    volume_ratio = latest_volume / average_volume if average_volume else 0.0
+    parts = {
+        "trend": round(direction(trend_items), 3),
+        "momentum": round(direction(momentum_items), 3),
+        "volatility": round(-min(volatility_pct / 5, 1), 3),
+        "volume": round(max(-1.0, min(1.0, (volume_ratio - 1) / 1.5)), 3),
+        "pattern": round(direction(pattern_items), 3),
+    }
+    weights = {"trend": .30, "momentum": .25, "volatility": .20, "volume": .15, "pattern": .10}
+    score = sum(parts[key] * weights[key] for key in weights)
+    overall = "bullish" if score >= .2 else "bearish" if score <= -.2 else "neutral"
+    abs_drawdown = abs(drawdown_pct)
+    risk_level = "High" if volatility_pct >= 4 or abs_drawdown >= 20 else "Elevated" if volatility_pct >= 2.5 or abs_drawdown >= 10 else "Moderate" if volatility_pct >= 1.2 or abs_drawdown >= 5 else "Lower"
 
     return {
         "indicators": indicators,
         "patterns": patterns,
         "summary": {
-            "indicators": ind_sig,
-            "patterns": pat_sig,
+            "indicators": _aggregate(indicators),
+            "patterns": _aggregate(patterns),
             "overall": overall,
+            "score": round(score, 3),
+            "breakdown": {key: {"score": parts[key], "weight": weights[key]} for key in weights},
+            "explanation": f"Trend {parts['trend']:+.2f}, momentum {parts['momentum']:+.2f}, volatility risk {parts['volatility']:+.2f}, volume {parts['volume']:+.2f}, and observed patterns {parts['pattern']:+.2f} combine to a {overall} technical signal.",
+            "risk": {
+                "volatilityPct": round(volatility_pct, 3),
+                "maxDrawdownPct": round(drawdown_pct, 3),
+                "rangePct": round((float(np.max(h)) - float(np.min(l))) / max(float(cl[-1]), 1e-12) * 100, 3),
+                "trendStrength": round(abs(parts["trend"]), 3),
+                "volumeRatio": round(volume_ratio, 3),
+                "classification": risk_level,
+            },
         },
     }

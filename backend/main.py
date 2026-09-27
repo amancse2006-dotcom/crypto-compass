@@ -29,7 +29,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from analysis import run_analysis
+from backend.analysis import run_analysis
 
 
 def sanitize(obj: Any) -> Any:
@@ -57,14 +57,15 @@ def sanitize(obj: Any) -> Any:
 # ---------------------------------------------------------------------------
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:3000,https://*.lovable.app,https://*.lovableproject.com",
+    "http://localhost:8080,http://localhost:5173,http://localhost:3000",
 ).split(",")
+ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS if origin.strip()]
 
-app = FastAPI(title="Crypto Analysis API", version="1.0.0")
+app = FastAPI(title="CryptoScope Market & Risk API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # public read-only data; tighten in prod
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -95,11 +96,14 @@ def to_bybit_symbol(symbol: str) -> str:
 
 
 async def fetch_json(url: str, params: dict | None = None) -> Any:
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
         r = await client.get(url, params=params)
+
         if r.status_code != 200:
             raise HTTPException(r.status_code, f"Upstream error: {r.text[:200]}")
+
         return r.json()
+  
 
 
 async def bybit_get(path: str, params: dict) -> dict:
@@ -115,7 +119,7 @@ async def bybit_get(path: str, params: dict) -> dict:
 # ---------------------------------------------------------------------------
 @app.get("/")
 async def root():
-    return {"ok": True, "service": "crypto-analysis-api", "source": "bybit"}
+    return {"ok": True, "service": "cryptoscope-api", "source": "bybit"}
 
 
 @app.get("/api/market/klines")
@@ -173,7 +177,9 @@ async def ticker(symbol: str = Query(...)):
         "changePercent": pct,
         "high24h": float(t.get("highPrice24h", 0)),
         "low24h": float(t.get("lowPrice24h", 0)),
-        "volume24h": float(t.get("volume24h", 0)),
+        # Turnover is quote-currency volume (USDT for these pairs), suitable
+        # for UI currency formatting; Bybit's volume24h is base-asset units.
+        "volume24h": float(t.get("turnover24h", 0)),
     }
 
 

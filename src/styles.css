@@ -75,6 +75,7 @@
     color: var(--color-foreground);
     font-family: var(--font-display);
     -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
   }
   .font-mono { font-family: var(--font-mono); }
 }
